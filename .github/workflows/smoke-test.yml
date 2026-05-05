@@ -1,0 +1,33 @@
+name: smoke-test
+
+on:
+  workflow_dispatch:
+    inputs:
+      step:
+        description: 'Which step to run (e.g. step-1, step-2, ...)'
+        required: true
+        default: 'step-1'
+        type: choice
+        options:
+          - step-1
+          - step-2
+          - step-3
+          - step-4
+          - step-5
+          - step-6
+          - step-7
+
+env:
+  API_TOKEN: ${{ secrets.API_TOKEN }}
+  WORKSPACE: ${{ secrets.WORKSPACE }}
+  CHAIN_JSON: ${{ secrets.CHAIN_JSON }}
+
+jobs:
+  run-single-step:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: python orchestrator.py --job ${{ inputs.step }}
