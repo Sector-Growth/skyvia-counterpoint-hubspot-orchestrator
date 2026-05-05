@@ -1,0 +1,86 @@
+name: sync
+
+on:
+  schedule:
+    # Sun + Wed 02:00 UTC = 10 PM ET (EDT) / 9 PM ET (EST). 1h drift in winter, acceptable for batch.
+    # Cron day-of-week: 1=Mon, 4=Thu (in UTC, this is "started Sun/Wed 10 PM ET")
+    - cron: '0 2 * * 1,4'
+  workflow_dispatch:
+
+env:
+  API_TOKEN: ${{ secrets.API_TOKEN }}
+  WORKSPACE: ${{ secrets.WORKSPACE }}
+  CHAIN_JSON: ${{ secrets.CHAIN_JSON }}
+
+jobs:
+  step-1:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: python orchestrator.py --job step-1
+
+  step-2:
+    needs: step-1
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: python orchestrator.py --job step-2
+
+  step-3:
+    needs: step-2
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: python orchestrator.py --job step-3
+
+  step-4:
+    needs: step-3
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: python orchestrator.py --job step-4
+
+  step-5:
+    needs: step-4
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: python orchestrator.py --job step-5
+
+  step-6:
+    needs: step-5
+    runs-on: ubuntu-latest
+    timeout-minutes: 350  # GitHub-hosted runner hard cap is 360 min
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: python orchestrator.py --job step-6
+
+  step-7:
+    # Run regardless of step-6 result, as long as step-5 succeeded.
+    # step-7 is independent of step-6 in source-system terms.
+    needs: [step-5, step-6]
+    if: ${{ always() && needs.step-5.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: python orchestrator.py --job step-7

@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.venv/
+venv/
+
+# Local secrets — never commit
+.env
+.env.*
+*.token
+.tokens-*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Local logs
+*.log
+/tmp/
