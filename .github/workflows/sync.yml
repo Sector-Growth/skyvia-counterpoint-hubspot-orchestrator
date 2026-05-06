@@ -2,8 +2,10 @@ name: sync
 
 on:
   schedule:
-    # Daily at 02:00 UTC = 10 PM ET (EDT) / 9 PM ET (EST). 1h drift in winter, acceptable for batch.
-    - cron: '0 2 * * *'
+    # Sun-Thu nights at 02:00 UTC = Sun-Thu 10 PM ET (EDT) / 9 PM ET (EST).
+    # In UTC days that's Mon-Fri (1-5). Result: data is fresh every weekday morning ET.
+    # 1h drift in winter is acceptable for an overnight batch.
+    - cron: '0 2 * * 1-5'
   workflow_dispatch:
 
 env:
