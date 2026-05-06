@@ -2,9 +2,8 @@ name: sync
 
 on:
   schedule:
-    # Sun + Wed 02:00 UTC = 10 PM ET (EDT) / 9 PM ET (EST). 1h drift in winter, acceptable for batch.
-    # Cron day-of-week: 1=Mon, 4=Thu (in UTC, this is "started Sun/Wed 10 PM ET")
-    - cron: '0 2 * * 1,4'
+    # Daily at 02:00 UTC = 10 PM ET (EDT) / 9 PM ET (EST). 1h drift in winter, acceptable for batch.
+    - cron: '0 2 * * *'
   workflow_dispatch:
 
 env:
