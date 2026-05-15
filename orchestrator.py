@@ -120,21 +120,31 @@ def trigger_or_resume(integration_id: int) -> int | None:
 def get_execution(integration_id: int, run_id: int) -> dict | None:
     """Get current state of a run.
 
-    Primary: /executions?limit=20 list endpoint. Cheap and reliable; the server
-    serves it from a separate path that has not been observed to time out.
-    Fallback: /executions/{runId} direct endpoint, used only if the run has
-    scrolled off the list window (rare for a still-active run).
+    Skyvia's API splits runs across endpoints by lifecycle stage:
+    - /executions/active returns the currently-running run (live counters)
+    - /executions?limit=N returns only terminal runs (in-progress excluded)
+    - /executions/{runId} works but times out server-side under load
 
-    Returns the execution dict if found, else None on transient failure.
+    Poll order: /active for in-progress, list for terminal, direct as last resort.
     """
+    # Is this run still active? Use /active for live state of in-progress runs.
+    try:
+        active = request('GET', f'/workspaces/{WORKSPACE}/integrations/{integration_id}/executions/active')
+        if active.get('runId') == run_id:
+            return active
+    except Exception as e:
+        log(f'Active endpoint failed (will try list): {e}')
+
+    # Not active (or /active failed) — check terminal runs.
     try:
         listing = request('GET', f'/workspaces/{WORKSPACE}/integrations/{integration_id}/executions?limit=20')
         for run in listing.get('data', []):
             if run.get('runId') == run_id:
                 return run
     except Exception as e:
-        log(f'List endpoint failed (will try direct): {e}')
+        log(f'List endpoint failed: {e}')
 
+    # Last resort. Direct endpoint frequently 500s under load on this workspace.
     try:
         return request('GET', f'/workspaces/{WORKSPACE}/integrations/{integration_id}/executions/{run_id}')
     except Exception as e:
@@ -147,10 +157,11 @@ def poll_to_completion(integration_id: int, run_id: int, poll_seconds: int, max_
 
     Skyvia drives total run duration; we wait as long as polls succeed and the
     run is still active. Bail only after sustained API silence. Silence threshold
-    is `max_minutes` minutes, capped at 60 (anything longer means Skyvia is
-    genuinely unreachable). GitHub Actions `timeout-minutes` is the outer cap.
+    is `max_minutes` minutes from CHAIN_JSON, which should be set per-step to
+    the expected run duration plus buffer. GitHub Actions `timeout-minutes` is
+    the outer wall-clock safety cap.
     """
-    silence_seconds = min(max_minutes, 60) * 60
+    silence_seconds = max_minutes * 60
     last_successful_poll = time.time()
     last_line = None
 
