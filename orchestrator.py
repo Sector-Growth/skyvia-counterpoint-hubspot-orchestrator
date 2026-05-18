@@ -152,24 +152,50 @@ def get_execution(integration_id: int, run_id: int) -> dict | None:
         return None
 
 
+DARK_WINDOW_SECONDS = 180  # After this much silence following a Running state, infer completion
+
+
 def poll_to_completion(integration_id: int, run_id: int, poll_seconds: int, max_minutes: int) -> tuple[bool, dict]:
     """Poll a run to terminal state.
 
-    Skyvia drives total run duration; we wait as long as polls succeed and the
-    run is still active. Bail only after sustained API silence. Silence threshold
-    is `max_minutes` minutes from CHAIN_JSON, which should be set per-step to
-    the expected run duration plus buffer. GitHub Actions `timeout-minutes` is
-    the outer wall-clock safety cap.
+    Skyvia's lifecycle has a "dark window": /active drops a run when state leaves
+    Running, but the list endpoint can take hours to surface the terminal state.
+    During that window, get_execution returns None even though the run finished.
+
+    Strategy:
+      - Track the last observed execution dict
+      - If we previously saw Running with successRows > 0 and silence reaches
+        DARK_WINDOW_SECONDS, infer Succeeded using the last observed counts
+      - Otherwise, silence threshold from max_minutes is the bail trigger
+
+    GitHub Actions timeout-minutes is the outer wall-clock safety cap.
     """
     silence_seconds = max_minutes * 60
     last_successful_poll = time.time()
     last_line = None
+    last_seen_execution = None
 
     while True:
         execution = get_execution(integration_id, run_id)
 
         if not execution:
             silence = int(time.time() - last_successful_poll)
+
+            # Dark-window completion: /active dropped a Running run before the
+            # list endpoint caught up. Infer Succeeded using last observed counts.
+            if (last_seen_execution
+                    and last_seen_execution.get('state') == 'Running'
+                    and last_seen_execution.get('successRows', 0) > 0
+                    and silence >= DARK_WINDOW_SECONDS):
+                inferred_success = last_seen_execution.get('successRows', 0)
+                inferred_errors = last_seen_execution.get('errorRows', 0)
+                log(f'Dark-window completion: silent={silence}s after last Running '
+                    f'state success={inferred_success} errors={inferred_errors} — inferring Succeeded')
+                synthetic = dict(last_seen_execution)
+                synthetic['state'] = 'Succeeded'
+                synthetic['_inferred'] = True
+                return True, synthetic
+
             if silence > silence_seconds:
                 log(f'GIVING UP: silence={silence}s exceeded threshold {silence_seconds}s')
                 return False, {'state': 'Silence', 'silence_seconds': silence}
@@ -178,6 +204,7 @@ def poll_to_completion(integration_id: int, run_id: int, poll_seconds: int, max_
             continue
 
         last_successful_poll = time.time()
+        last_seen_execution = execution
         state = execution.get('state', 'Unknown')
         live_success = execution.get('successRows', 0)
         live_errors = execution.get('errorRows', 0)
