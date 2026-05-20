@@ -1,11 +1,11 @@
 name: sync
 
 on:
-  schedule:
-    # Sun-Thu nights at 02:00 UTC = Sun-Thu 10 PM ET (EDT) / 9 PM ET (EST).
-    # In UTC days that's Mon-Fri (1-5). Result: data is fresh every weekday morning ET.
-    # 1h drift in winter is acceptable for an overnight batch.
-    - cron: '0 2 * * 1-5'
+  # Scheduled runs disabled 2026-05-20: Skyvia Control Flow now owns the
+  # nightly chain. This workflow remains as a manual fallback only.
+  # To re-enable: uncomment the schedule block below.
+  # schedule:
+  #   - cron: '0 2 * * 1-5'  # Sun-Thu 22:00 ET = Mon-Fri 02:00 UTC
   workflow_dispatch:
 
 env:
