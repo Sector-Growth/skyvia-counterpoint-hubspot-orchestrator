@@ -76,12 +76,22 @@ jobs:
   step-7:
     # Run regardless of step-6 result, as long as step-5 succeeded.
     # step-7 is independent of step-6 in source-system terms.
+    #
+    # 15-min buffer before triggering Skyvia: step-6's high-volume Line Items
+    # upsert (~39K rows) bursts HubSpot's 15K-reads-per-5-seconds CRM API
+    # limit at the portal level. Even after step-6 completes, immediately
+    # firing step-7 (which also bursts reads against the same portal) can
+    # collide with the still-recovering budget and fail with the same
+    # rate-limit error. The 15-min delay gives HubSpot's portal-wide budget
+    # full time to clear before step-7's burst.
     needs: [step-5, step-6]
     if: ${{ always() && needs.step-5.result == 'success' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 135
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: '3.11' }
+      - name: Wait for HubSpot rate-limit budget to clear after step-6 burst
+        run: sleep 900
       - run: python orchestrator.py --job step-7
