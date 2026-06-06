@@ -1,11 +1,12 @@
 name: sync
 
 on:
-  # Scheduled runs disabled 2026-05-20: Skyvia Control Flow now owns the
-  # nightly chain. This workflow remains as a manual fallback only.
-  # To re-enable: uncomment the schedule block below.
-  # schedule:
-  #   - cron: '0 2 * * 1-5'  # Sun-Thu 22:00 ET = Mon-Fri 02:00 UTC
+  # Re-enabled 2026-06-06: GH Actions is the primary scheduler again
+  # (Skyvia Control Flow abandoned Jun 2). Chain validated end-to-end Jun 5:
+  # step-6 incremental (POST_DAT 30-day window) + "Use cache" off on the
+  # Deals lookups in step-6/7 resolved the HubSpot internal rate limit.
+  schedule:
+    - cron: '0 2 * * 1-5'  # Sun-Thu 22:00 ET = Mon-Fri 02:00 UTC
   workflow_dispatch:
 
 env:
