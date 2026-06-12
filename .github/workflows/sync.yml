@@ -64,8 +64,22 @@ jobs:
         with: { python-version: '3.11' }
       - run: python orchestrator.py --job step-5
 
-  step-6:
+  # step-5b: Data Flow "Deals - Open Orders Insert-Update (Stage Lock)".
+  # Creates new open-order deals at PO/Order Created; updates fields on
+  # existing deals WITHOUT touching dealstage (manual stage moves persist).
+  # Replaces the open-orders half of the old step-5 Import (now cancelled-only).
+  step-5b:
     needs: step-5
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: python orchestrator.py --job step-5b
+
+  step-6:
+    needs: step-5b
     runs-on: ubuntu-latest
     timeout-minutes: 350  # GitHub-hosted runner hard cap is 360 min
     steps:
