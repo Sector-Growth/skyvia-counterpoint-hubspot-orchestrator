@@ -102,7 +102,12 @@ jobs:
     needs: [step-5, step-6]
     if: ${{ always() && needs.step-5.result == 'success' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 135
+    # 180 (was 135): the Skyvia run itself takes ~114 min and, with the 15-min
+    # pre-sleep plus polling-detection lag, the job was landing right at the old
+    # 135 cap (Jun 15 finished at 131.5 min; Jun 16 hit 135 and GitHub cancelled
+    # the job even though Skyvia had already completed the sync server-side).
+    # 180 gives ~50 min headroom; runner hard cap is 360.
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
