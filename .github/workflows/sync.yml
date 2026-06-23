@@ -5,8 +5,17 @@ on:
   # (Skyvia Control Flow abandoned Jun 2). Chain validated end-to-end Jun 5:
   # step-6 incremental (POST_DAT 30-day window) + "Use cache" off on the
   # Deals lookups in step-6/7 resolved the HubSpot internal rate limit.
+  # Target: START ~6 PM ET (after the client's 6 PM data-entry cutoff, and
+  # well before the NetOps 12 AM-5 AM patching window that was dropping the
+  # CounterPoint connection overnight; confirmed Jun 2026 w/ NetOps).
+  # The full chain is ~5.5h, so a ~6 PM start finishes ~11:30 PM ET, clear of
+  # patching. GitHub Actions has been firing this repo's schedule ~5h LATE
+  # (a 02:00 UTC cron fired ~06:24-07:13 UTC across Jun 15-22), so 17:00 UTC
+  # is chosen to compensate: 17:00 + ~5h drift ≈ 22:00 UTC = 6 PM EDT.
+  # VERIFY actual fire time and tune this offset if the drift changes.
+  # DST: this assumes EDT (UTC-4); revisit at the Nov DST change (6 PM EST = 23:00 UTC).
   schedule:
-    - cron: '0 2 * * 1-5'  # Sun-Thu 22:00 ET = Mon-Fri 02:00 UTC
+    - cron: '0 17 * * 1-5'  # ~17:00 UTC + GH ~5h drift = ~6 PM EDT, Mon-Fri
   workflow_dispatch:
 
 env:
