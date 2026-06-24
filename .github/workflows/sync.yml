@@ -5,18 +5,20 @@ on:
   # (Skyvia Control Flow abandoned Jun 2). Chain validated end-to-end Jun 5:
   # step-6 incremental (POST_DAT 30-day window) + "Use cache" off on the
   # Deals lookups in step-6/7 resolved the HubSpot internal rate limit.
-  # Start the chain at 6 PM ET: after the client's 6 PM data-entry cutoff and
-  # well before the NetOps 12 AM-5 AM patching window that was dropping the
-  # CounterPoint connection overnight (confirmed Jun 2026 w/ NetOps). The
-  # ~5.5h chain then finishes ~11:30 PM ET, clear of patching.
+  # Start the chain at 5:30 PM ET: after most of the client's data entry (6 PM
+  # cutoff) but early enough that even a long ~6.25h chain (seen Jun 23)
+  # finishes by ~11:45 PM ET, clear of the NetOps 12 AM-5 AM patching window
+  # that was dropping the CounterPoint connection overnight (confirmed w/
+  # NetOps Jun 2026). 5:30 (vs 6:00) buys ~30 min margin so step-7's tail
+  # never grazes midnight on a long night.
   # GitHub's schedule drift is large AND variable (~2h on the Jun 23 evening
-  # run, ~5h on the morning runs), so the cron alone cannot hit 6 PM. Instead
-  # the cron fires early (drifts to ~1-6 PM ET) and the 'gate' job below HOLDS
-  # until exactly 6 PM ET (DST-aware) before the chain begins, making the
-  # start independent of the drift. 17:00 UTC keeps the fire <= 6 PM ET even
-  # at ~5h drift, so the gate always waits forward, never starts late.
+  # run, ~5h on the morning runs), so the cron alone cannot hit 5:30. Instead
+  # the cron fires early (drifts to ~noon-5:30 PM ET) and the 'gate' job below
+  # HOLDS until exactly 5:30 PM ET (DST-aware) before the chain begins, making
+  # the start independent of the drift. 16:00 UTC keeps the fire <= 5:30 PM ET
+  # even at ~5h drift, so the gate always waits forward, never starts late.
   schedule:
-    - cron: '0 17 * * 1-5'  # fires ~1-6 PM ET (drift); gate holds to 6 PM ET
+    - cron: '0 16 * * 1-5'  # fires ~noon-5 PM ET (drift); gate holds to 5:30 PM ET
   workflow_dispatch:
 
 env:
@@ -25,23 +27,23 @@ env:
   CHAIN_JSON: ${{ secrets.CHAIN_JSON }}
 
 jobs:
-  # Gate: GitHub fires the schedule with variable drift (~1-6 PM ET). This job
-  # holds until exactly 6 PM America/New_York (DST-aware), then releases the
-  # chain, so the sync always starts at 6 PM ET regardless of when GitHub
-  # actually triggered the workflow. Idle wait is ~0-5h on a cheap runner.
+  # Gate: GitHub fires the schedule with variable drift (~noon-5:30 PM ET).
+  # This job holds until exactly 5:30 PM America/New_York (DST-aware), then
+  # releases the chain, so the sync always starts at 5:30 PM ET regardless of
+  # when GitHub actually triggered. Idle wait is ~0-5.5h on a cheap runner.
   gate:
     runs-on: ubuntu-latest
-    timeout-minutes: 330
+    timeout-minutes: 360
     steps:
-      - name: Hold until 6 PM Eastern
+      - name: Hold until 5:30 PM Eastern
         run: |
-          TARGET=$(date -u -d 'TZ="America/New_York" 18:00' +%s)
+          TARGET=$(date -u -d 'TZ="America/New_York" 17:30' +%s)
           NOW=$(date -u +%s)
           if [ "$NOW" -lt "$TARGET" ]; then
-            echo "Holding $(( (TARGET-NOW)/60 )) min until 6 PM ET ($(date -u -d "@$TARGET") UTC)"
+            echo "Holding $(( (TARGET-NOW)/60 )) min until 5:30 PM ET ($(date -u -d "@$TARGET") UTC)"
             sleep $((TARGET - NOW))
           else
-            echo "Already at/past 6 PM ET ($(date -u) UTC); starting now"
+            echo "Already at/past 5:30 PM ET ($(date -u) UTC); starting now"
           fi
 
   step-1:
