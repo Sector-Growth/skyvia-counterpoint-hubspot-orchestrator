@@ -78,6 +78,38 @@ def parse_final_counts(execution: dict) -> tuple[int, int]:
     return success, errors
 
 
+# Skyvia error signatures that mean the run never opened its CounterPoint
+# source connection (agent / SQL Server briefly unreachable). Seen overnight
+# during NetOps patching AND mid-day as random blips (e.g. Jun 25 5:37 PM ET).
+# Safe to re-trigger because no rows moved.
+TRANSIENT_CONNECTION_SIGNATURES = (
+    'provider creation failed',
+    'cancellationtokensource',
+    'a connection attempt failed',
+    'transport-level error',
+)
+
+
+def is_transient_connection_failure(execution: dict) -> bool:
+    """True only for a clean connection-open failure with NO rows processed.
+    A failure that moved any rows (success>0 or errors>0) is a data problem and
+    must NOT be retried. 'Silence' (uncertain state) is also not retried, since
+    the run may still be alive and re-triggering could double-process."""
+    if execution.get('state') not in ('Failed', 'Canceled'):
+        return False
+    if (execution.get('successRows') or 0) > 0 or (execution.get('errorRows') or 0) > 0:
+        return False
+    raw = execution.get('result')
+    msg = ''
+    if raw:
+        try:
+            msg = json.loads(raw).get('ErrorMessage') or ''
+        except (json.JSONDecodeError, TypeError):
+            msg = str(raw)
+    msg = msg.lower()
+    return any(sig in msg for sig in TRANSIENT_CONNECTION_SIGNATURES)
+
+
 def trigger_or_resume(integration_id: int) -> int | None:
     log(f'Checking for active execution on integration {integration_id}...')
     try:
@@ -242,19 +274,41 @@ def main() -> None:
         log(f'Unknown job {args.job!r}. Available: {[s["name"] for s in CHAIN]}')
         sys.exit(2)
 
-    log(f'=== Step {step["name"]} (integration {step["integration_id"]}) ===')
+    integration_id = step['integration_id']
+    # Retry only transient connection failures (no rows moved). Defaults apply
+    # if CHAIN_JSON doesn't override per-step. trigger_or_resume() resumes any
+    # live run first, so a retry never double-triggers.
+    max_attempts = step.get('retry_attempts', 3)
+    backoff = step.get('retry_backoff_seconds', 120)
+    log(f'=== Step {step["name"]} (integration {integration_id}) ===')
 
-    run_id = trigger_or_resume(step['integration_id'])
-    if not run_id:
-        log('Could not start or resume execution')
-        sys.exit(1)
+    success, execution = False, {}
+    for attempt in range(1, max_attempts + 1):
+        if attempt > 1:
+            log(f'--- attempt {attempt}/{max_attempts} ---')
 
-    success, execution = poll_to_completion(
-        step['integration_id'],
-        run_id,
-        step.get('poll_seconds', 60),
-        step.get('max_minutes', 60),
-    )
+        run_id = trigger_or_resume(integration_id)
+        if run_id:
+            success, execution = poll_to_completion(
+                integration_id, run_id,
+                step.get('poll_seconds', 60),
+                step.get('max_minutes', 60),
+            )
+            if success:
+                break
+        else:
+            log('Could not start or resume execution')
+            execution = {'state': 'TriggerFailed'}
+
+        # Retry a lost trigger or a clean transient connection failure only.
+        retriable = (not run_id) or is_transient_connection_failure(execution)
+        if attempt < max_attempts and retriable:
+            why = 'trigger failed' if not run_id else 'transient connection failure (0 rows)'
+            log(f'{why}; retrying in {backoff}s [{attempt}/{max_attempts} attempts used]')
+            time.sleep(backoff)
+            continue
+        break
+
     log(f'Result: state={execution.get("state")} success={execution.get("successRows")} errors={execution.get("errorRows")}')
     sys.exit(0 if success else 1)
 
